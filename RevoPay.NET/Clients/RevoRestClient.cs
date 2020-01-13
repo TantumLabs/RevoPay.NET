@@ -1,12 +1,16 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using RestSharp;
+using System;
 using System.Collections.Generic;
-using System.Net.Http;
+using System.Threading.Tasks;
 
 namespace RevoPay.NET.Clients
 {
     public class RevoRestClient : IRevoRestClient
     {
-        public HttpClient HttpClient { get; }
+        public IRestClient RestClient { get; }
+
+        public IRestRequest RestRequest { get; }
 
         private readonly string _token;
         private readonly string _companyID;
@@ -25,11 +29,30 @@ namespace RevoPay.NET.Clients
             {
                 _endPoint = sandboxUrl;
             }
-            HttpClient = new HttpClient()
+            RestClient = new RestClient(_endPoint);
+            RestRequest = new RestRequest(RestSharp.Method.POST);
+            RestRequest.AddHeader("Content-Type", "application/x-www-form-urlencoded");
+            RestRequest.AddParameter("token", _token);
+        }
+
+        public async Task<T> SendRequest<T>(IRequest request)
+        {
+            RestRequest.Resource = request.EndPoint;
+            Dictionary<string, dynamic> parameters = BuildRequestDictionary(request.PaypointID);
+            var settings = new JsonSerializerSettings
             {
-                BaseAddress = new Uri(_endPoint)
+                NullValueHandling = NullValueHandling.Ignore
             };
-            HttpClient.DefaultRequestHeaders.Add("", "");
+            RestRequest.AddParameter("request", JsonConvert.SerializeObject(parameters, Formatting.None, settings));
+            try
+            {
+                IRestResponse<T> response = await RestClient.ExecuteAsync<T>(RestRequest).ConfigureAwait(true);
+                return response.Data;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Revo Internal Server Error: " + ex.Message);
+            }
         }
 
         private Dictionary<string, dynamic> BuildRequestDictionary(string PaypointID = null)
